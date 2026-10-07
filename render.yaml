@@ -4,6 +4,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    buildCommand: pip install -U --pre "yt-dlp[default]"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
