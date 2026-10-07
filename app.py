@@ -142,6 +142,13 @@ def _get_ydl_opts(extra: Optional[dict] = None) -> dict:
         "noplaylist": True,
         "extract_flat": False,
         "socket_timeout": 30,
+        # Yeh add karo - multiple clients try karega
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web", "mweb", "tv", "android", "ios"],
+                "player_skip": ["webpage", "configs"],
+            }
+        },
     }
     if os.path.exists(COOKIES_FILE):
         opts["cookiefile"] = COOKIES_FILE
