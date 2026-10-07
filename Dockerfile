@@ -1,23 +1,35 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y \
-    ffmpeg git curl nodejs npm \
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/root/.deno/bin:${PATH}"
+
+# ffmpeg + curl/unzip for Deno.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    unzip \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --single-branch --branch main https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/bgutil \
-    && cd /opt/bgutil/server && npm install && npx tsc
+# Install Deno (yt-dlp uses it for YouTube JavaScript/EJS challenges).
+RUN curl -fsSL https://deno.land/install.sh | sh \
+    && /root/.deno/bin/deno --version
 
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-RUN useradd -m -u 1000 apiuser && chown -R apiuser:apiuser /app /opt/bgutil
+# Non-root user; copy Deno binary to a system path so it remains available.
+RUN cp /root/.deno/bin/deno /usr/local/bin/deno \
+    && useradd -m -u 1000 apiuser \
+    && chown -R apiuser:apiuser /app
+
 USER apiuser
 
-COPY start.sh /start.sh
-USER root
-RUN chmod +x /start.sh
-USER apiuser
+EXPOSE 8000
 
-CMD ["/start.sh"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

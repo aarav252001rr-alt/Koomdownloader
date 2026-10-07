@@ -142,13 +142,10 @@ def _get_ydl_opts(extra: Optional[dict] = None) -> dict:
         "noplaylist": True,
         "extract_flat": False,
         "socket_timeout": 30,
-        # Yeh add karo - multiple clients try karega
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web", "mweb", "tv", "android", "ios"],
-                "player_skip": ["webpage", "configs"],
-            }
-        },
+        # YouTube may require yt-dlp's EJS challenge solver.
+        # Deno is installed in the Docker image and auto-discovery is
+        # supplemented with this explicit runtime declaration.
+        "js_runtimes": {"deno": {}},
     }
     if os.path.exists(COOKIES_FILE):
         opts["cookiefile"] = COOKIES_FILE
@@ -234,6 +231,37 @@ async def health():
     return {"status": "ok", "time": int(time.time())}
 
 
+@app.get("/debug", dependencies=[Depends(verify_key)])
+async def debug():
+    """Deployment diagnostics; does not expose cookie contents."""
+    import subprocess
+
+    result = {
+        "yt_dlp_version": getattr(yt_dlp.version, "__version__", "unknown"),
+        "cookies_file": {
+            "path": COOKIES_FILE,
+            "exists": os.path.exists(COOKIES_FILE),
+            "size": os.path.getsize(COOKIES_FILE) if os.path.exists(COOKIES_FILE) else 0,
+        },
+        "js_runtime": {"deno": False, "deno_version": None},
+    }
+
+    try:
+        p = await asyncio.to_thread(
+            subprocess.run,
+            ["deno", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        result["js_runtime"]["deno"] = p.returncode == 0
+        result["js_runtime"]["deno_version"] = (p.stdout or p.stderr).strip().splitlines()[:1]
+    except Exception as e:
+        result["js_runtime"]["deno_error"] = str(e)
+
+    return result
+
+
 # ---------- INFO ----------
 @app.get("/info", response_model=InfoResponse, dependencies=[Depends(verify_key)])
 async def info(
@@ -246,7 +274,8 @@ async def info(
     try:
         data = await asyncio.to_thread(fetch_video_info, url)
     except yt_dlp.utils.DownloadError as e:
-        raise HTTPException(422, f"Extraction failed: {str(e)[:200]}")
+        logger.error("yt-dlp extraction failed: %s", e)
+        raise HTTPException(422, f"Extraction failed: {str(e)[:500]}")
     except Exception as e:
         logger.exception("info error")
         raise HTTPException(500, f"Server error: {str(e)[:200]}")
