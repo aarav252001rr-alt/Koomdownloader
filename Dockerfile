@@ -1,21 +1,23 @@
 FROM python:3.11-slim
 
-# ffmpeg install
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
+    ffmpeg git curl nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+RUN git clone --single-branch --branch main https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/bgutil \
+    && cd /opt/bgutil/server && npm install && npx tsc
 
+WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
 
-# Non-root user
-RUN useradd -m -u 1000 apiuser && chown -R apiuser:apiuser /app
+RUN useradd -m -u 1000 apiuser && chown -R apiuser:apiuser /app /opt/bgutil
 USER apiuser
 
-EXPOSE 8000
+COPY start.sh /start.sh
+USER root
+RUN chmod +x /start.sh
+USER apiuser
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/start.sh"]
