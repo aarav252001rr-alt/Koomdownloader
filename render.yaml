@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ytmusic-api
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: API_KEY
+        generateValue: true
+      - key: STREAM_TTL
+        value: 300
+    healthCheckPath: /health
+    autoDeploy: true
