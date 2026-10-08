@@ -7,18 +7,8 @@ from typing import Optional
 
 import yt_dlp
 
-from fastapi import (
-    FastAPI,
-    Header,
-    HTTPException,
-    Query,
-)
-
-from fastapi.responses import (
-    FileResponse,
-    JSONResponse,
-)
-
+from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -28,10 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 APP_NAME = "YouTube Music API"
 
-API_KEY = os.getenv(
-    "API_KEY",
-    "Mys1104"
-)
+API_KEY = os.getenv("API_KEY", "Mys1104")
 
 COOKIES_FILE = os.getenv(
     "COOKIES_FILE",
@@ -57,7 +44,7 @@ DOWNLOAD_DIR.mkdir(
 
 app = FastAPI(
     title=APP_NAME,
-    version="1.1.0"
+    version="1.2.0"
 )
 
 
@@ -89,11 +76,12 @@ def check_api_key(
 
 
 # ============================================================
-# ERROR SANITIZER
+# SANITIZE LOG / ERROR
 # ============================================================
 
-def sanitize_error(error):
-    text = str(error)
+def sanitize_text(text):
+
+    text = str(text)
 
     patterns = [
         r"(?i)cookie[^,\n]*",
@@ -109,10 +97,14 @@ def sanitize_error(error):
             text
         )
 
-    if len(text) > 1000:
-        text = text[:1000] + "..."
+    if len(text) > 2000:
+        text = text[:2000] + "..."
 
     return text
+
+
+def sanitize_error(error):
+    return sanitize_text(error)
 
 
 # ============================================================
@@ -125,41 +117,44 @@ def get_ydl_opts(
 
     opts = {
 
-        # Basic
         "quiet": True,
+
         "no_warnings": True,
+
         "skip_download": True,
+
         "noplaylist": True,
 
-        # Modern YouTube JS challenge support
+        # JavaScript runtime
         "js_runtimes": {
             "deno": {}
         },
 
         # Network
         "socket_timeout": 30,
+
         "retries": 2,
 
         # SSL
         "nocheckcertificate": False,
 
-        # Browser-like headers
+        # Browser headers
         "http_headers": {
-            "User-Agent": (
+
+            "User-Agent":
                 "Mozilla/5.0 "
                 "(Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 "
                 "(KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
+                "Chrome/131.0.0.0 Safari/537.36",
 
             "Accept-Language":
                 "en-US,en;q=0.9",
 
             "Accept":
                 "text/html,application/xhtml+xml,"
-                "application/xml;q=0.9,*/*;q=0.8",
-        },
+                "application/xml;q=0.9,*/*;q=0.8"
+        }
     }
 
     # --------------------------------------------------------
@@ -175,9 +170,7 @@ def get_ydl_opts(
                 "player_client": [
                     client
                 ]
-
             }
-
         }
 
     # --------------------------------------------------------
@@ -196,6 +189,51 @@ def get_ydl_opts(
 
 
 # ============================================================
+# VERBOSE LOGGER
+# ============================================================
+
+class YTDLPLogger:
+
+    def __init__(self):
+        self.logs = []
+
+    def _add(self, level, message):
+
+        text = sanitize_text(
+            message
+        )
+
+        if not text:
+            return
+
+        self.logs.append({
+            "level": level,
+            "message": text
+        })
+
+    def debug(self, message):
+
+        self._add(
+            "debug",
+            message
+        )
+
+    def warning(self, message):
+
+        self._add(
+            "warning",
+            message
+        )
+
+    def error(self, message):
+
+        self._add(
+            "error",
+            message
+        )
+
+
+# ============================================================
 # ROOT
 # ============================================================
 
@@ -211,7 +249,7 @@ async def root():
             "online",
 
         "version":
-            "1.1.0",
+            "1.2.0",
 
         "yt_dlp":
             yt_dlp.version.__version__,
@@ -219,15 +257,20 @@ async def root():
         "endpoints": [
 
             "/",
+
             "/health",
+
             "/debug",
+
             "/debug/youtube",
+
             "/debug/verbose",
+
             "/info",
+
             "/download"
 
         ]
-
     }
 
 
@@ -245,7 +288,6 @@ async def health():
 
         "yt_dlp":
             yt_dlp.version.__version__
-
     }
 
 
@@ -255,9 +297,11 @@ async def health():
 
 @app.get("/debug")
 async def debug(
+
     x_api_key: Optional[str] = Header(
         default=None
     )
+
 ):
 
     check_api_key(
@@ -280,7 +324,6 @@ async def debug(
             text=True,
 
             timeout=10
-
         )
 
         deno_version = (
@@ -330,7 +373,6 @@ async def debug(
 
             "size":
                 cookie_size
-
         },
 
         "js_runtime": {
@@ -340,9 +382,7 @@ async def debug(
 
             "deno_version":
                 deno_version
-
         }
-
     }
 
 
@@ -353,9 +393,7 @@ async def debug(
 @app.get("/info")
 async def info(
 
-    url: str = Query(
-        ...
-    ),
+    url: str = Query(...),
 
     x_api_key: Optional[str] = Header(
         default=None
@@ -424,7 +462,6 @@ async def info(
 
                 "url":
                     fmt.get("url")
-
             })
 
         return {
@@ -464,7 +501,6 @@ async def info(
 
             "formats":
                 formats
-
         }
 
     except Exception as e:
@@ -481,9 +517,7 @@ async def info(
 
                 "status":
                     422
-
             }
-
         )
 
 
@@ -494,9 +528,7 @@ async def info(
 @app.get("/debug/youtube")
 async def debug_youtube(
 
-    url: str = Query(
-        ...
-    ),
+    url: str = Query(...),
 
     x_api_key: Optional[str] = Header(
         default=None
@@ -521,7 +553,6 @@ async def debug_youtube(
         "mweb",
 
         "web_music"
-
     ]
 
     results = []
@@ -567,7 +598,6 @@ async def debug_youtube(
 
                 "formats":
                     len(formats)
-
             })
 
         except Exception as e:
@@ -582,7 +612,6 @@ async def debug_youtube(
 
                 "error":
                     sanitize_error(e)
-
             })
 
     return {
@@ -598,20 +627,17 @@ async def debug_youtube(
 
         "results":
             results
-
     }
 
 
 # ============================================================
-# VERBOSE YOUTUBE DIAGNOSTIC
+# VERBOSE DIAGNOSTIC
 # ============================================================
 
 @app.get("/debug/verbose")
 async def debug_verbose(
 
-    url: str = Query(
-        ...
-    ),
+    url: str = Query(...),
 
     x_api_key: Optional[str] = Header(
         default=None
@@ -623,51 +649,7 @@ async def debug_verbose(
         x_api_key
     )
 
-    logs = []
-
-    # --------------------------------------------------------
-    # Custom logger
-    # --------------------------------------------------------
-
-    def logger(message):
-
-        text = str(message)
-
-        # Remove sensitive data
-        patterns = [
-
-            r"(?i)cookie[^,\n]*",
-
-            r"(?i)authorization[^,\n]*",
-
-            r"(?i)proxy[^,\n]*",
-
-            r"(?i)po[_ -]?token[^,\n]*",
-
-        ]
-
-        for pattern in patterns:
-
-            text = re.sub(
-                pattern,
-                "[REDACTED]",
-                text
-            )
-
-        if len(text) > 1500:
-
-            text = (
-                text[:1500]
-                + "..."
-            )
-
-        logs.append(
-            text
-        )
-
-    # --------------------------------------------------------
-    # Verbose options
-    # --------------------------------------------------------
+    logger = YTDLPLogger()
 
     opts = get_ydl_opts()
 
@@ -684,7 +666,6 @@ async def debug_verbose(
 
         "logger":
             logger
-
     })
 
     try:
@@ -716,8 +697,7 @@ async def debug_verbose(
                 info_data.get("duration"),
 
             "logs":
-                logs[-150:]
-
+                logger.logs[-200:]
         }
 
     except Exception as e:
@@ -733,9 +713,11 @@ async def debug_verbose(
             "error":
                 sanitize_error(e),
 
-            "logs":
-                logs[-200:]
+            "log_count":
+                len(logger.logs),
 
+            "logs":
+                logger.logs[-250:]
         }
 
 
@@ -746,9 +728,7 @@ async def debug_verbose(
 @app.get("/download")
 async def download(
 
-    url: str = Query(
-        ...
-    ),
+    url: str = Query(...),
 
     format_id: str = Query(
         "bestaudio"
@@ -805,25 +785,18 @@ async def download(
 
                     "preferredquality":
                         "192"
-
                 }
-
             ]
-
         })
 
         with yt_dlp.YoutubeDL(
             opts
         ) as ydl:
 
-            info_data = ydl.extract_info(
+            ydl.extract_info(
                 url,
                 download=True
             )
-
-        # ----------------------------------------------------
-        # Find generated file
-        # ----------------------------------------------------
 
         files = list(
             Path(temp_dir).glob("*")
@@ -835,9 +808,10 @@ async def download(
                 "Downloaded file not found"
             )
 
-        # Prefer MP3
         mp3_files = [
+
             f for f in files
+
             if f.suffix.lower() == ".mp3"
         ]
 
@@ -864,7 +838,6 @@ async def download(
             filename=file_path.name,
 
             media_type="audio/mpeg"
-
         )
 
     except Exception as e:
@@ -881,9 +854,7 @@ async def download(
 
                 "status":
                     422
-
             }
-
         )
 
 
@@ -896,17 +867,13 @@ async def download(
 )
 async def startup_event():
 
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
     print(
         APP_NAME
     )
 
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
     print(
         "yt-dlp:",
@@ -925,10 +892,6 @@ async def startup_event():
         COOKIES_FILE
     )
 
-    print(
-        "Deno:"
-    )
-
     try:
 
         result = subprocess.run(
@@ -943,7 +906,6 @@ async def startup_event():
             text=True,
 
             timeout=10
-
         )
 
         print(
@@ -961,9 +923,7 @@ async def startup_event():
         DOWNLOAD_DIR
     )
 
-    print(
-        "=" * 60
-    )
+    print("=" * 60)
 
 
 # ============================================================
@@ -988,5 +948,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
 
         port=port
-
     )
