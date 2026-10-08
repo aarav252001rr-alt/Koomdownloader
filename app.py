@@ -1,12 +1,24 @@
 import os
 import re
 import tempfile
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 import yt_dlp
-from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+
+from fastapi import (
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+)
+
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+)
+
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -15,7 +27,11 @@ from fastapi.middleware.cors import CORSMiddleware
 # ============================================================
 
 APP_NAME = "YouTube Music API"
-API_KEY = os.getenv("API_KEY", "Mys1104")
+
+API_KEY = os.getenv(
+    "API_KEY",
+    "Mys1104"
+)
 
 COOKIES_FILE = os.getenv(
     "COOKIES_FILE",
@@ -23,7 +39,10 @@ COOKIES_FILE = os.getenv(
 )
 
 DOWNLOAD_DIR = Path(
-    os.getenv("DOWNLOAD_DIR", "/tmp/downloads")
+    os.getenv(
+        "DOWNLOAD_DIR",
+        "/tmp/downloads"
+    )
 )
 
 DOWNLOAD_DIR.mkdir(
@@ -38,7 +57,7 @@ DOWNLOAD_DIR.mkdir(
 
 app = FastAPI(
     title=APP_NAME,
-    version="1.0.0"
+    version="1.1.0"
 )
 
 
@@ -56,7 +75,7 @@ app.add_middleware(
 
 
 # ============================================================
-# API KEY CHECK
+# API KEY
 # ============================================================
 
 def check_api_key(
@@ -70,74 +89,12 @@ def check_api_key(
 
 
 # ============================================================
-# YT-DLP OPTIONS
-# ============================================================
-
-def get_ydl_opts(
-    client: Optional[str] = None
-):
-
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "noplaylist": True,
-
-        # Required for modern YouTube extraction
-        "js_runtimes": {
-            "deno": {}
-        },
-
-        "socket_timeout": 30,
-        "retries": 2,
-
-        "nocheckcertificate": False,
-
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 "
-                "(Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 "
-                "(KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-    }
-
-    # --------------------------------------------------------
-    # YouTube client
-    # --------------------------------------------------------
-
-    if client:
-        opts["extractor_args"] = {
-            "youtube": {
-                "player_client": [client]
-            }
-        }
-
-    # --------------------------------------------------------
-    # Cookies
-    # --------------------------------------------------------
-
-    if os.path.exists(COOKIES_FILE):
-        opts["cookiefile"] = COOKIES_FILE
-
-    return opts
-
-
-# ============================================================
 # ERROR SANITIZER
 # ============================================================
 
 def sanitize_error(error):
-    """
-    Remove potentially sensitive information from errors.
-    """
-
     text = str(error)
 
-    # Remove cookie/auth related content
     patterns = [
         r"(?i)cookie[^,\n]*",
         r"(?i)authorization[^,\n]*",
@@ -152,10 +109,90 @@ def sanitize_error(error):
             text
         )
 
-    if len(text) > 700:
-        text = text[:700] + "..."
+    if len(text) > 1000:
+        text = text[:1000] + "..."
 
     return text
+
+
+# ============================================================
+# YT-DLP OPTIONS
+# ============================================================
+
+def get_ydl_opts(
+    client: Optional[str] = None
+):
+
+    opts = {
+
+        # Basic
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "noplaylist": True,
+
+        # Modern YouTube JS challenge support
+        "js_runtimes": {
+            "deno": {}
+        },
+
+        # Network
+        "socket_timeout": 30,
+        "retries": 2,
+
+        # SSL
+        "nocheckcertificate": False,
+
+        # Browser-like headers
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 "
+                "(KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+
+            "Accept-Language":
+                "en-US,en;q=0.9",
+
+            "Accept":
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,*/*;q=0.8",
+        },
+    }
+
+    # --------------------------------------------------------
+    # YouTube client
+    # --------------------------------------------------------
+
+    if client:
+
+        opts["extractor_args"] = {
+
+            "youtube": {
+
+                "player_client": [
+                    client
+                ]
+
+            }
+
+        }
+
+    # --------------------------------------------------------
+    # Cookies
+    # --------------------------------------------------------
+
+    if os.path.exists(
+        COOKIES_FILE
+    ):
+
+        opts["cookiefile"] = (
+            COOKIES_FILE
+        )
+
+    return opts
 
 
 # ============================================================
@@ -166,27 +203,49 @@ def sanitize_error(error):
 async def root():
 
     return {
-        "name": APP_NAME,
-        "status": "online",
-        "yt_dlp": yt_dlp.version.__version__,
+
+        "name":
+            APP_NAME,
+
+        "status":
+            "online",
+
+        "version":
+            "1.1.0",
+
+        "yt_dlp":
+            yt_dlp.version.__version__,
+
         "endpoints": [
-            "/info",
+
+            "/",
+            "/health",
             "/debug",
-            "/debug/youtube"
+            "/debug/youtube",
+            "/debug/verbose",
+            "/info",
+            "/download"
+
         ]
+
     }
 
 
 # ============================================================
-# HEALTH CHECK
+# HEALTH
 # ============================================================
 
 @app.get("/health")
 async def health():
 
     return {
-        "status": "ok",
-        "yt_dlp": yt_dlp.version.__version__
+
+        "status":
+            "ok",
+
+        "yt_dlp":
+            yt_dlp.version.__version__
+
     }
 
 
@@ -196,60 +255,94 @@ async def health():
 
 @app.get("/debug")
 async def debug(
-    x_api_key: Optional[str] = Header(default=None)
+    x_api_key: Optional[str] = Header(
+        default=None
+    )
 ):
 
-    check_api_key(x_api_key)
+    check_api_key(
+        x_api_key
+    )
 
     deno_version = None
 
     try:
-        import subprocess
 
         result = subprocess.run(
-            ["deno", "--version"],
+
+            [
+                "deno",
+                "--version"
+            ],
+
             capture_output=True,
+
             text=True,
+
             timeout=10
+
         )
 
         deno_version = (
-            result.stdout.strip().splitlines()
+            result.stdout
+            .strip()
+            .splitlines()
         )
 
-    except Exception as e:
+    except Exception:
+
         deno_version = [
             "Deno unavailable"
         ]
 
-    cookie_exists = os.path.exists(
-        COOKIES_FILE
+    cookie_exists = (
+        os.path.exists(
+            COOKIES_FILE
+        )
     )
 
     cookie_size = 0
 
     if cookie_exists:
+
         try:
+
             cookie_size = os.path.getsize(
                 COOKIES_FILE
             )
+
         except Exception:
+
             cookie_size = 0
 
     return {
+
         "yt_dlp_version":
             yt_dlp.version.__version__,
 
         "cookies_file": {
-            "path": COOKIES_FILE,
-            "exists": cookie_exists,
-            "size": cookie_size
+
+            "path":
+                COOKIES_FILE,
+
+            "exists":
+                cookie_exists,
+
+            "size":
+                cookie_size
+
         },
 
         "js_runtime": {
-            "deno": bool(deno_version),
-            "deno_version": deno_version
+
+            "deno":
+                bool(deno_version),
+
+            "deno_version":
+                deno_version
+
         }
+
     }
 
 
@@ -259,17 +352,28 @@ async def debug(
 
 @app.get("/info")
 async def info(
-    url: str = Query(...),
-    x_api_key: Optional[str] = Header(default=None)
+
+    url: str = Query(
+        ...
+    ),
+
+    x_api_key: Optional[str] = Header(
+        default=None
+    )
+
 ):
 
-    check_api_key(x_api_key)
+    check_api_key(
+        x_api_key
+    )
 
     try:
 
         opts = get_ydl_opts()
 
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        with yt_dlp.YoutubeDL(
+            opts
+        ) as ydl:
 
             info_data = ydl.extract_info(
                 url,
@@ -284,6 +388,7 @@ async def info(
         ):
 
             formats.append({
+
                 "format_id":
                     fmt.get("format_id"),
 
@@ -318,11 +423,14 @@ async def info(
                     fmt.get("filesize"),
 
                 "url":
-                    fmt.get("url"),
+                    fmt.get("url")
+
             })
 
         return {
-            "status": "success",
+
+            "status":
+                "success",
 
             "id":
                 info_data.get("id"),
@@ -356,20 +464,26 @@ async def info(
 
             "formats":
                 formats
+
         }
 
     except Exception as e:
 
         return JSONResponse(
+
             status_code=422,
+
             content={
+
                 "error":
                     "Extraction failed: "
                     + sanitize_error(e),
 
                 "status":
                     422
+
             }
+
         )
 
 
@@ -379,30 +493,38 @@ async def info(
 
 @app.get("/debug/youtube")
 async def debug_youtube(
-    url: str = Query(...),
-    x_api_key: Optional[str] = Header(default=None)
+
+    url: str = Query(
+        ...
+    ),
+
+    x_api_key: Optional[str] = Header(
+        default=None
+    )
+
 ):
 
-    check_api_key(x_api_key)
-
-    # --------------------------------------------------------
-    # Clients to test
-    # --------------------------------------------------------
+    check_api_key(
+        x_api_key
+    )
 
     clients = [
+
         "tv",
+
         "web_embedded",
+
         "android_vr",
+
         "web",
+
         "mweb",
-        "web_music",
+
+        "web_music"
+
     ]
 
     results = []
-
-    # --------------------------------------------------------
-    # Test every client separately
-    # --------------------------------------------------------
 
     for client in clients:
 
@@ -445,6 +567,7 @@ async def debug_youtube(
 
                 "formats":
                     len(formats)
+
             })
 
         except Exception as e:
@@ -459,6 +582,7 @@ async def debug_youtube(
 
                 "error":
                     sanitize_error(e)
+
             })
 
     return {
@@ -474,7 +598,145 @@ async def debug_youtube(
 
         "results":
             results
+
     }
+
+
+# ============================================================
+# VERBOSE YOUTUBE DIAGNOSTIC
+# ============================================================
+
+@app.get("/debug/verbose")
+async def debug_verbose(
+
+    url: str = Query(
+        ...
+    ),
+
+    x_api_key: Optional[str] = Header(
+        default=None
+    )
+
+):
+
+    check_api_key(
+        x_api_key
+    )
+
+    logs = []
+
+    # --------------------------------------------------------
+    # Custom logger
+    # --------------------------------------------------------
+
+    def logger(message):
+
+        text = str(message)
+
+        # Remove sensitive data
+        patterns = [
+
+            r"(?i)cookie[^,\n]*",
+
+            r"(?i)authorization[^,\n]*",
+
+            r"(?i)proxy[^,\n]*",
+
+            r"(?i)po[_ -]?token[^,\n]*",
+
+        ]
+
+        for pattern in patterns:
+
+            text = re.sub(
+                pattern,
+                "[REDACTED]",
+                text
+            )
+
+        if len(text) > 1500:
+
+            text = (
+                text[:1500]
+                + "..."
+            )
+
+        logs.append(
+            text
+        )
+
+    # --------------------------------------------------------
+    # Verbose options
+    # --------------------------------------------------------
+
+    opts = get_ydl_opts()
+
+    opts.update({
+
+        "quiet":
+            False,
+
+        "no_warnings":
+            False,
+
+        "verbose":
+            True,
+
+        "logger":
+            logger
+
+    })
+
+    try:
+
+        with yt_dlp.YoutubeDL(
+            opts
+        ) as ydl:
+
+            info_data = ydl.extract_info(
+                url,
+                download=False
+            )
+
+        return {
+
+            "status":
+                "PASS",
+
+            "yt_dlp":
+                yt_dlp.version.__version__,
+
+            "id":
+                info_data.get("id"),
+
+            "title":
+                info_data.get("title"),
+
+            "duration":
+                info_data.get("duration"),
+
+            "logs":
+                logs[-150:]
+
+        }
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "FAIL",
+
+            "yt_dlp":
+                yt_dlp.version.__version__,
+
+            "error":
+                sanitize_error(e),
+
+            "logs":
+                logs[-200:]
+
+        }
 
 
 # ============================================================
@@ -483,18 +745,31 @@ async def debug_youtube(
 
 @app.get("/download")
 async def download(
-    url: str = Query(...),
-    format_id: str = Query("bestaudio"),
-    x_api_key: Optional[str] = Header(default=None)
+
+    url: str = Query(
+        ...
+    ),
+
+    format_id: str = Query(
+        "bestaudio"
+    ),
+
+    x_api_key: Optional[str] = Header(
+        default=None
+    )
+
 ):
 
-    check_api_key(x_api_key)
+    check_api_key(
+        x_api_key
+    )
 
     try:
 
-        # Temporary directory
         temp_dir = tempfile.mkdtemp(
-            dir=str(DOWNLOAD_DIR)
+            dir=str(
+                DOWNLOAD_DIR
+            )
         )
 
         output_template = os.path.join(
@@ -506,17 +781,22 @@ async def download(
 
         opts.update({
 
-            "skip_download": False,
+            "skip_download":
+                False,
 
-            "format": format_id,
+            "format":
+                format_id,
 
             "outtmpl":
                 output_template,
 
-            "noplaylist": True,
+            "noplaylist":
+                True,
 
             "postprocessors": [
+
                 {
+
                     "key":
                         "FFmpegExtractAudio",
 
@@ -524,9 +804,12 @@ async def download(
                         "mp3",
 
                     "preferredquality":
-                        "192",
+                        "192"
+
                 }
+
             ]
+
         })
 
         with yt_dlp.YoutubeDL(
@@ -538,43 +821,33 @@ async def download(
                 download=True
             )
 
-            requested_downloads = (
-                info_data.get(
-                    "requested_downloads"
-                )
-                or []
+        # ----------------------------------------------------
+        # Find generated file
+        # ----------------------------------------------------
+
+        files = list(
+            Path(temp_dir).glob("*")
+        )
+
+        if not files:
+
+            raise Exception(
+                "Downloaded file not found"
             )
 
-            downloaded_file = None
+        # Prefer MP3
+        mp3_files = [
+            f for f in files
+            if f.suffix.lower() == ".mp3"
+        ]
 
-            if requested_downloads:
+        if mp3_files:
 
-                downloaded_file = (
-                    requested_downloads[0]
-                    .get("filepath")
-                )
+            file_path = mp3_files[0]
 
-            # Fallback: search directory
-            if not downloaded_file:
+        else:
 
-                files = list(
-                    Path(temp_dir).glob("*")
-                )
-
-                if files:
-                    downloaded_file = str(
-                        files[0]
-                    )
-
-            if not downloaded_file:
-
-                raise Exception(
-                    "Downloaded file not found"
-                )
-
-        file_path = Path(
-            downloaded_file
-        )
+            file_path = files[0]
 
         if not file_path.exists():
 
@@ -583,23 +856,34 @@ async def download(
             )
 
         return FileResponse(
-            path=str(file_path),
+
+            path=str(
+                file_path
+            ),
+
             filename=file_path.name,
+
             media_type="audio/mpeg"
+
         )
 
     except Exception as e:
 
         return JSONResponse(
+
             status_code=422,
+
             content={
+
                 "error":
                     "Download failed: "
                     + sanitize_error(e),
 
                 "status":
                     422
+
             }
+
         )
 
 
@@ -607,12 +891,22 @@ async def download(
 # STARTUP
 # ============================================================
 
-@app.on_event("startup")
+@app.on_event(
+    "startup"
+)
 async def startup_event():
 
-    print("=" * 60)
-    print(APP_NAME)
-    print("=" * 60)
+    print(
+        "=" * 60
+    )
+
+    print(
+        APP_NAME
+    )
+
+    print(
+        "=" * 60
+    )
 
     print(
         "yt-dlp:",
@@ -621,7 +915,9 @@ async def startup_event():
 
     print(
         "Cookies:",
-        os.path.exists(COOKIES_FILE)
+        os.path.exists(
+            COOKIES_FILE
+        )
     )
 
     print(
@@ -630,11 +926,44 @@ async def startup_event():
     )
 
     print(
+        "Deno:"
+    )
+
+    try:
+
+        result = subprocess.run(
+
+            [
+                "deno",
+                "--version"
+            ],
+
+            capture_output=True,
+
+            text=True,
+
+            timeout=10
+
+        )
+
+        print(
+            result.stdout
+        )
+
+    except Exception:
+
+        print(
+            "Deno unavailable"
+        )
+
+    print(
         "Download directory:",
         DOWNLOAD_DIR
     )
 
-    print("=" * 60)
+    print(
+        "=" * 60
+    )
 
 
 # ============================================================
@@ -653,7 +982,11 @@ if __name__ == "__main__":
     )
 
     uvicorn.run(
+
         "app:app",
+
         host="0.0.0.0",
+
         port=port
+
     )
